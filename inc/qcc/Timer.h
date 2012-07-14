@@ -153,11 +153,12 @@ class Timer : public ThreadListener {
     /**
      * Constructor
      *
-     * @param name          Name for the thread.
-     * @param expireOnExit  If true call all pending alarms when this thread exits.
-     * @param concurency    Dispatch up to this number of alarms concurently (using multiple threads).
+     * @param name               Name for the thread.
+     * @param expireOnExit       If true call all pending alarms when this thread exits.
+     * @param concurency         Dispatch up to this number of alarms concurently (using multiple threads).
+     * @param prevenReentrancy   Prevent re-entrant call of AlarmTriggered.
      */
-    Timer(const char* name = "timer", bool expireOnExit = false, uint32_t concurency = 1);
+    Timer(const char* name = "timer", bool expireOnExit = false, uint32_t concurency = 1, bool preventReentrancy = false);
 
     /**
      * Destructor.
@@ -253,6 +254,28 @@ class Timer : public ThreadListener {
     bool HasAlarm(const Alarm& alarm);
 
     /**
+     * Allow the currently executing AlarmTriggered callback to be reentered if another alarm is triggered.
+     * Calling this method has no effect if timer was created with preventReentrancy == false;
+     * Calling this method can only be made from within the AlarmTriggered timer callback.
+     */
+    void EnableReentrancy();
+
+    /**
+     * Check whether the current TimerThread is holding the lock
+     *
+     * @return true if the current thread is a timer thread that holds the reentrancy lock
+     */
+    bool ThreadHoldsLock() const;
+
+    /**
+     * Get the name of the Timer thread pool
+     *
+     * @return the name of the timer thread(s)
+     */
+    const qcc::String& GetName() const
+    { return nameStr; }
+
+    /**
      * TimerThread ThreadExit callback.
      * For internal use only.
      */
@@ -264,11 +287,13 @@ class Timer : public ThreadListener {
     std::multiset<Alarm, std::less<Alarm> >  alarms;
     Alarm* currentAlarm;
     bool expireOnExit;
-    uint32_t concurency;
     std::vector<TimerThread*> timerThreads;
     bool isRunning;
     int32_t controllerIdx;
     qcc::Timespec yieldControllerTime;
+    bool preventReentrancy;
+    Mutex reentrancyLock;
+    qcc::String nameStr;
 };
 
 }

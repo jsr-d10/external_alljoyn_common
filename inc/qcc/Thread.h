@@ -29,6 +29,7 @@
 #include <qcc/Mutex.h>
 #include <Status.h>
 
+#include <set>
 #include <map>
 
 #ifndef NDEBUG
@@ -72,6 +73,9 @@ class ThreadListener {
      * The underlying Thread instance is guaranteed to not be accessed once
      * this callback returns. This allows implementations to free the Thread
      * if desired.
+     *
+     * Under posix, if the thread has been Kill()'d, only async-signal-safe
+     * functions may be called by this function's implementation.
      *
      * @param thread   Thread that has exited.
      */
@@ -259,18 +263,6 @@ class Thread {
     Event& GetStopEvent(void) { return stopEvent; }
 
     /**
-     * Is this thread allowed to block on the specified resource.
-     */
-    bool CanBlock(const void* resource) { return resource != noBlockResource; }
-
-    /**
-     * Sets the no-block resource for this thread. Only this thread can set this flag.
-     *
-     * @param  The no-block resource to set. Or NULL to clear the no-block resource.
-     */
-    void SetNoBlock(const void* resource) { if (GetThread() == this) { noBlockResource = resource; } }
-
-    /**
      * Get the alertCode that was set by the caller to Alert()
      *
      * @return The alertCode specified by the caller to Alert.
@@ -397,15 +389,17 @@ class Thread {
     unsigned int threadId;          ///< Thread ID used by windows
     ThreadListener* listener;       ///< Listener notified of thread events (or NULL).
     bool isExternal;                ///< If true, Thread is external (i.e. lifecycle not managed by Thread obj)
-    const void* noBlockResource;    ///< No-block resource for this thread
     uint32_t alertCode;             ///< Context passed from alerter to alertee
-    std::vector<ThreadListener*> auxListeners;
+
+    typedef std::set<ThreadListener*> ThreadListeners;
+    ThreadListeners auxListeners;
     Mutex auxListenersLock;
 
 #ifdef QCC_OS_GROUP_POSIX
     int32_t waitCount;
     Mutex waitLock;
     bool hasBeenJoined;
+    int32_t exitCount;
 #endif
 
     /** Lock that protects global list of Threads and their handles */

@@ -138,7 +138,6 @@ Thread::Thread(qcc::String name, Thread::ThreadFunction func, bool isExternal) :
     threadId(isExternal ? GetCurrentThreadId() : 0),
     listener(NULL),
     isExternal(isExternal),
-    noBlockResource(NULL),
     alertCode(0),
     auxListeners(),
     auxListenersLock()
@@ -181,6 +180,10 @@ ThreadInternalReturn STDCALL Thread::RunInternal(void* threadArg)
     assert(thread->state = STARTED);
     assert(!thread->isExternal);
 
+    if (thread->state != STARTED) {
+        return 0;
+    }
+
     ++started;
 
     /* Add this Thread to list of running threads */
@@ -208,12 +211,23 @@ ThreadInternalReturn STDCALL Thread::RunInternal(void* threadArg)
     thread->state = STOPPING;
     thread->stopEvent.ResetEvent();
 
-    /* Call aux listeners before main listener since main listner may delete the thread */
-    thread->auxListenersLock.Lock();
-    for (size_t i = 0; i < thread->auxListeners.size(); ++i) {
-        thread->auxListeners[i]->ThreadExit(thread);
+    /*
+     * The following block must be in its own scope because microsoft STL's ITERATOR_DEBUG_LEVEL==2
+     * falsely concludes that the iterator defined below (without its own scope) is still in scope
+     * when auxListener's destructor runs from within ~Thread. Go Microsoft.
+     */
+    {
+        /* Call aux listeners before main listener since main listner may delete the thread */
+        thread->auxListenersLock.Lock();
+
+        ThreadListeners::iterator it = thread->auxListeners.begin();
+        while (it != thread->auxListeners.end()) {
+            ThreadListener* listener = *it;
+            listener->ThreadExit(thread);
+            it = thread->auxListeners.upper_bound(listener);
+        }
+        thread->auxListenersLock.Unlock();
     }
-    thread->auxListenersLock.Unlock();
 
     /*
      * Call thread exit callback if specified. Note that ThreadExit may dellocate the thread so the
@@ -318,18 +332,24 @@ QStatus Thread::Kill(void)
         return status;
     }
     QCC_DbgTrace(("Thread::Kill() [%s run: %s]", funcName, IsRunning() ? "true" : "false"));
-    threadListLock.Lock();
     if (IsRunning()) {
-        TerminateThread(handle, 0);
+        if (TerminateThread(handle, 0)) {
+            status = ER_OS_ERROR;
+            QCC_LogError(status, ("TerminateThread: GetLastError=%d", GetLastError));
+            return status;
+        }
         CloseHandle(handle);
         handle = 0;
         state = DEAD;
         isStopping = false;
         /* Remove this Thread from list of running threads */
+        threadListLock.Lock();
         threadList.erase((ThreadHandle)threadId);
+        threadListLock.Unlock();
+        if (listener) {
+            listener->ThreadExit(this);
+        }
     }
-    threadListLock.Unlock();
-
     return status;
 }
 
@@ -394,14 +414,14 @@ QStatus Thread::Join(void)
 void Thread::AddAuxListener(ThreadListener* listener)
 {
     auxListenersLock.Lock();
-    auxListeners.push_back(listener);
+    auxListeners.insert(listener);
     auxListenersLock.Unlock();
 }
 
 void Thread::RemoveAuxListener(ThreadListener* listener)
 {
     auxListenersLock.Lock();
-    vector<ThreadListener*>::iterator it = find(auxListeners.begin(), auxListeners.end(), listener);
+    ThreadListeners::iterator it = auxListeners.find(listener);
     if (it != auxListeners.end()) {
         auxListeners.erase(it);
     }
