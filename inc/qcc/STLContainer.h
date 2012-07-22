@@ -25,12 +25,24 @@
 #ifndef _STLCONTAINER_H
 #define _STLCONTAINER_H
 
-
-
+#if defined(QCC_OS_ANDROID)
+#include <ext/hash_map>
+#include <ext/hash_set>
+#else
 #include <unordered_map>
 #include <unordered_set>
+#endif
 
-#if defined _MSC_VER && _MSC_VER == 1500
+
+#if defined(QCC_OS_ANDROID)
+
+using namespace __gnu_cxx;
+#define unordered_map hash_map
+#define unordered_multimap hash_multimap
+#define unordered_set hash_set
+#define STL_NAMESPACE_PREFIX  __gnu_cxx
+
+#elif defined _MSC_VER && _MSC_VER == 1500
 /*
  * For MSVC2008 unordered_map, unordered_multimap, unordered_set, and hash
  * are found in the tr1 libraries while in new version of MSVC and in GNU
