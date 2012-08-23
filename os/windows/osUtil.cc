@@ -29,8 +29,11 @@
 #define SECURITY_WIN32
 #include <security.h>
 #include <secext.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 
 #include <qcc/Util.h>
+#include <qcc/IPAddress.h>
 #include <qcc/String.h>
 #include <qcc/Thread.h>
 #include <qcc/Crypto.h>

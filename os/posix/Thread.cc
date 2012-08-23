@@ -5,7 +5,7 @@
  */
 
 /******************************************************************************
- * Copyright 2009-2011, Qualcomm Innovation Center, Inc.
+ * Copyright 2009-2012, Qualcomm Innovation Center, Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -50,16 +50,26 @@ static uint32_t started = 0;
 static uint32_t running = 0;
 static uint32_t joined = 0;
 
-/** Mutex that protects global thread list */
-Thread::ThreadListLock Thread::threadListLock;
-Mutex* Thread::ThreadListLock::m_mutex = NULL;
-bool Thread::ThreadListLock::m_destructed = false;
-
 /** Global thread list */
-map<ThreadHandle, Thread*> Thread::threadList;
+Mutex* Thread::threadListLock = NULL;
+map<ThreadHandle, Thread*>* Thread::threadList = NULL;
 
-void Thread::SigHandler(int signal)
+static int threadListCounter = 0;
+
+ThreadListInitializer::ThreadListInitializer()
 {
+    if (0 == threadListCounter++) {
+        Thread::threadListLock = new Mutex();
+        Thread::threadList = new map<ThreadHandle, Thread*>();
+    }
+}
+
+ThreadListInitializer::~ThreadListInitializer()
+{
+    if (0 == --threadListCounter) {
+        delete Thread::threadList;
+        delete Thread::threadListLock;
+    }
 }
 
 QStatus Sleep(uint32_t ms) {
@@ -72,12 +82,12 @@ Thread* Thread::GetThread()
     Thread* ret = NULL;
 
     /* Find thread on Thread::threadList */
-    threadListLock.Lock();
-    map<ThreadHandle, Thread*>::const_iterator iter = threadList.find(pthread_self());
-    if (iter != threadList.end()) {
+    threadListLock->Lock();
+    map<ThreadHandle, Thread*>::const_iterator iter = threadList->find(pthread_self());
+    if (iter != threadList->end()) {
         ret = iter->second;
     }
-    threadListLock.Unlock();
+    threadListLock->Unlock();
 
     /* If the current thread isn't on the list, then create an external (wrapper) thread */
     if (NULL == ret) {
@@ -89,15 +99,15 @@ Thread* Thread::GetThread()
 
 const char* Thread::GetThreadName()
 {
-    Thread*thread = NULL;
+    Thread* thread = NULL;
 
     /* Find thread on Thread::threadList */
-    threadListLock.Lock();
-    map<ThreadHandle, Thread*>::const_iterator iter = threadList.find(pthread_self());
-    if (iter != threadList.end()) {
+    threadListLock->Lock();
+    map<ThreadHandle, Thread*>::const_iterator iter = threadList->find(pthread_self());
+    if (iter != threadList->end()) {
         thread = iter->second;
     }
-    threadListLock.Unlock();
+    threadListLock->Unlock();
 
     /* If the current thread isn't on the list, then don't create an external (wrapper) thread */
     if (thread == NULL) {
@@ -109,23 +119,20 @@ const char* Thread::GetThreadName()
 
 void Thread::CleanExternalThreads()
 {
-    threadListLock.Lock();
-    map<ThreadHandle, Thread*>::iterator it = threadList.begin();
-    while (it != threadList.end()) {
+    threadListLock->Lock();
+    map<ThreadHandle, Thread*>::iterator it = threadList->begin();
+    while (it != threadList->end()) {
         if (it->second->isExternal) {
             delete it->second;
-            threadList.erase(it++);
+            threadList->erase(it++);
         } else {
             ++it;
         }
     }
-    threadListLock.Unlock();
+    threadListLock->Unlock();
 }
 
 Thread::Thread(qcc::String name, Thread::ThreadFunction func, bool isExternal) :
-#ifndef NDEBUG
-    lockTrace(this),
-#endif
     stopEvent(),
     state(isExternal ? RUNNING : INITIAL),
     isStopping(false),
@@ -134,6 +141,7 @@ Thread::Thread(qcc::String name, Thread::ThreadFunction func, bool isExternal) :
     exitValue(NULL),
     listener(NULL),
     isExternal(isExternal),
+    platformContext(NULL),
     alertCode(0),
     auxListeners(),
     auxListenersLock(),
@@ -149,9 +157,9 @@ Thread::Thread(qcc::String name, Thread::ThreadFunction func, bool isExternal) :
     /* If this is an external thread, add it to the thread list here since Run will not be called */
     if (isExternal) {
         assert(func == NULL);
-        threadListLock.Lock();
-        threadList[handle] = this;
-        threadListLock.Unlock();
+        threadListLock->Lock();
+        (*threadList)[handle] = this;
+        threadListLock->Unlock();
     }
     QCC_DbgHLPrintf(("Thread::Thread() created %s - %x -- started:%d running:%d joined:%d", funcName, handle, started, running, joined));
 }
@@ -196,31 +204,20 @@ ThreadInternalReturn Thread::RunInternal(void* threadArg)
 
     QCC_DbgPrintf(("Thread::RunInternal: %s (pid=%x)", thread->funcName, (unsigned long) thread->handle));
 
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = &SigHandler;
-    sa.sa_flags = 0;
-    int ret = sigaction(SIGUSR1, &sa, NULL);
-    if (0 != ret) {
-        QCC_LogError(ER_OS_ERROR, ("Thread:Run() [%s] Failed to set SIGUSR1 handler", thread->funcName));
-        thread->exitValue = reinterpret_cast<ThreadInternalReturn>(0);
-    } else {
+    /* Add this Thread to list of running threads */
+    threadListLock->Lock();
+    (*threadList)[thread->handle] = thread;
+    thread->state = RUNNING;
+    pthread_sigmask(SIG_UNBLOCK, &newmask, NULL);
+    threadListLock->Unlock();
 
-        /* Add this Thread to list of running threads */
-        threadListLock.Lock();
-        threadList[thread->handle] = thread;
-        thread->state = RUNNING;
-        pthread_sigmask(SIG_UNBLOCK, &newmask, NULL);
-        threadListLock.Unlock();
-
-        /* Start the thread if it hasn't been stopped */
-        if (!thread->isStopping) {
-            QCC_DbgPrintf(("Starting thread: %s", thread->funcName));
-            ++running;
-            thread->exitValue = thread->Run(thread->arg);
-            --running;
-            QCC_DbgPrintf(("Thread function exited: %s --> %p", thread->funcName, thread->exitValue));
-        }
+    /* Start the thread if it hasn't been stopped */
+    if (!thread->isStopping) {
+        QCC_DbgPrintf(("Starting thread: %s", thread->funcName));
+        ++running;
+        thread->exitValue = thread->Run(thread->arg);
+        --running;
+        QCC_DbgPrintf(("Thread function exited: %s --> %p", thread->funcName, thread->exitValue));
     }
 
     thread->state = STOPPING;
@@ -250,12 +247,10 @@ ThreadInternalReturn Thread::RunInternal(void* threadArg)
 
     /* This also means no QCC_DbgPrintf as they try to get context on the current thread */
 
-    if (ret == 0) {
-        /* Remove this Thread from list of running threads */
-        threadListLock.Lock();
-        threadList.erase(handle);
-        threadListLock.Unlock();
-    }
+    /* Remove this Thread from list of running threads */
+    threadListLock->Lock();
+    threadList->erase(handle);
+    threadListLock->Unlock();
 
     return reinterpret_cast<ThreadInternalReturn>(retVal);
 }

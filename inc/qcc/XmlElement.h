@@ -262,6 +262,21 @@ struct XmlParseContext {
 
   private:
 
+    /*
+     * Default constructor not defined
+     */
+    XmlParseContext();
+
+    /*
+     * Copy constructor not defined
+     */
+    XmlParseContext(const XmlParseContext& other);
+
+    /*
+     * Assignment operator not defined
+     */
+    XmlParseContext& operator=(const XmlParseContext& other);
+
     /** Xml source */
     Source& source;
 

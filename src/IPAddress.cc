@@ -24,14 +24,6 @@
 
 #include <qcc/platform.h>
 
-#ifdef QCC_OS_WINDOWS
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <sys/socket.h>
-#include <netdb.h>
-#endif
-
 #include <algorithm>
 #include <ctype.h>
 #include <string.h>
@@ -87,57 +79,191 @@ IPAddress::IPAddress(const qcc::String& addrString)
 
 qcc::String IPAddress::IPv4ToString(const uint8_t addr[])
 {
-    qcc::String oss;
-    size_t pos;
+    qcc::String result = "";
 
-    pos = 0;
-    oss.append(U32ToString(static_cast<uint32_t>(addr[pos]), 10));;
-    for (++pos; pos < IPv4_SIZE; ++pos) {
-        oss.push_back('.');
-        oss.append(U32ToString(static_cast<uint32_t>(addr[pos]), 10));
+    while (true) {
+        if (NULL == addr) {
+            break;
+        }
+
+        char addressChars[4 * 3 + 3 + 1];
+        int32_t addressCharCounter = 0;
+        size_t addrCounter = 0;
+
+        while (addrCounter < IPv4_SIZE) {
+            int32_t val = addr[addrCounter++];
+            int32_t num[3];
+            int32_t numIndex = 2;
+
+            if (val > 0) {
+                while (val > 0) {
+                    int32_t digit = val % 10;
+                    val /= 10;
+                    num[numIndex--] = digit;
+                }
+            } else {
+                num[numIndex--] = 0;
+            }
+
+            for (size_t c = numIndex + 1; c < ArraySize(num); c++) {
+                addressChars[addressCharCounter++] = U8ToChar(num[c]);
+            }
+
+            if (addrCounter < IPv4_SIZE) {
+                addressChars[addressCharCounter++] = '.';
+            }
+        }
+
+        addressChars[addressCharCounter++] = '\0';
+        result = addressChars;
+        break;
     }
 
-    return oss;
+    return result;
 }
 
 qcc::String IPAddress::IPv6ToString(const uint8_t addr[])
 {
-    qcc::String oss;
-    size_t i;
-    size_t j;
-    int zerocnt;
-    int maxzerocnt = 0;
+    qcc::String result = "";
 
-    for (i = 0; i < IPv6_SIZE; i += 2) {
-        if (addr[i] == 0 && addr[i + 1] == 0) {
-            zerocnt = 0;
-            for (j = IPv6_SIZE - 2; j > i; j -= 2) {
-                if (addr[j] == 0 && addr[j + 1] == 0) {
-                    ++zerocnt;
-                    maxzerocnt = max(maxzerocnt, zerocnt);
+    while (true) {
+        if (NULL == addr) {
+            break;
+        }
+
+        char addressChars[8 * 4 + 7 + 1];
+        int32_t addressCharCounter = 0;
+        size_t addrCounter = 0;
+        int32_t firstGroupZero = -1;
+        int32_t lastGroupZero = -1;
+        int32_t minFirstGroupZero = -1;
+        int32_t maxLastGroupZero = -1;
+
+        // Scan for 0s to collapse
+        while (addrCounter < IPv6_SIZE) {
+            int32_t val = addr[addrCounter++];
+            int32_t val2 = addr[addrCounter++];
+            if (val == 0 && val2 == 0) {
+                if (firstGroupZero == -1) {
+                    firstGroupZero = addrCounter >> 1;
+                }
+
+                lastGroupZero = addrCounter >> 1;
+            } else {
+                if (firstGroupZero != -1 && lastGroupZero != -1) {
+                    if (minFirstGroupZero == -1 && maxLastGroupZero == -1) {
+                        // Initial scan result
+                        minFirstGroupZero = firstGroupZero;
+                        maxLastGroupZero = lastGroupZero;
+                    } else if ((lastGroupZero - firstGroupZero) > (maxLastGroupZero - minFirstGroupZero)) {
+                        minFirstGroupZero = firstGroupZero;
+                        maxLastGroupZero = lastGroupZero;
+                    }
+                }
+
+                firstGroupZero = -1;
+                lastGroupZero = -1;
+            }
+        }
+
+        if (minFirstGroupZero == -1 && maxLastGroupZero == -1) {
+            // Initial scan result
+            minFirstGroupZero = firstGroupZero;
+            maxLastGroupZero = lastGroupZero;
+        }
+
+        addrCounter = 0;
+        size_t minFirstZero = (minFirstGroupZero - 1) << 1;
+        size_t maxLastZero = (maxLastGroupZero - 1) << 1;
+
+        if (minFirstZero == 0 && maxLastZero == 8 &&
+            addr[0xa] == 0xff && addr[0xb] == 0xff) {
+            // IPV4 mapped IPV6
+            addressChars[addressCharCounter++] = ':';
+            addressChars[addressCharCounter++] = ':';
+            addressChars[addressCharCounter++] = 'f';
+            addressChars[addressCharCounter++] = 'f';
+            addressChars[addressCharCounter++] = 'f';
+            addressChars[addressCharCounter++] = 'f';
+            addressChars[addressCharCounter++] = ':';
+            addrCounter += 12;
+
+            for (size_t i = addrCounter; i < IPv6_SIZE; i++) {
+                int32_t val = addr[i];
+                int32_t num[3];
+                int32_t numIndex = 2;
+
+                if (val > 0) {
+                    while (val > 0) {
+                        int32_t digit = val % 10;
+                        val /= 10;
+                        num[numIndex--] = digit;
+                    }
                 } else {
-                    zerocnt = 0;
+                    num[numIndex--] = 0;
                 }
-            }
-            // Count the zero we are pointing to.
-            ++zerocnt;
-            maxzerocnt = max(maxzerocnt, zerocnt);
 
-            if (zerocnt == maxzerocnt) {
-                oss.push_back(':');
-                if (i == 0) {
-                    oss.push_back(':');
+                for (size_t c = numIndex + 1; c < ArraySize(num); c++) {
+                    addressChars[addressCharCounter++] = U8ToChar(num[c]);
                 }
-                i += (zerocnt - 1) * 2;
-                continue;
+
+                if (i + 1 < IPv6_SIZE) {
+                    addressChars[addressCharCounter++] = '.';
+                }
+            }
+        } else {
+            while (addrCounter < IPv6_SIZE) {
+                if (addrCounter >= minFirstZero && addrCounter <= maxLastZero) {
+                    if (addrCounter == minFirstZero) {
+                        addressChars[addressCharCounter++] = ':';
+                        addressChars[addressCharCounter++] = ':';
+                    }
+                    // skip group
+                    addrCounter += 2;
+                } else {
+                    int32_t val = addr[addrCounter++];
+                    int32_t temp;
+                    bool leadingZero = true;
+
+                    // High nibble (high byte)
+                    temp = val >> 4;
+                    if (temp != 0 || !leadingZero) {
+                        addressChars[addressCharCounter++] = U8ToChar(temp);
+                        leadingZero = false;
+                    }
+
+                    // Low nible (high byte)
+                    temp = val & 0xf;
+                    if (temp != 0 || !leadingZero) {
+                        addressChars[addressCharCounter++] = U8ToChar(temp);
+                        leadingZero = false;
+                    }
+
+                    val = addr[addrCounter++];
+
+                    // High nibble (low byte)
+                    temp = val >> 4;
+                    if (temp != 0 || !leadingZero) {
+                        addressChars[addressCharCounter++] = U8ToChar(temp);
+                    }
+
+                    // Low nible (low byte)
+                    temp = val & 0xf;
+                    addressChars[addressCharCounter++] = U8ToChar(temp);
+
+                    if (addrCounter != minFirstZero && addrCounter < IPv6_SIZE) {
+                        addressChars[addressCharCounter++] = ':';
+                    }
+                }
             }
         }
-        oss.append(U32ToString((uint32_t)(addr[i] << 8 | addr[i + 1]), 16));
-        if (i + 2 < IPv6_SIZE) {
-            oss.push_back(':');
-        }
+
+        addressChars[addressCharCounter++] = '\0';
+        result = addressChars;
+        break;
     }
-    return oss;
+
+    return result;
 }
 
 inline void SetBits(uint64_t set[], int32_t offset, uint64_t bits)
@@ -185,7 +311,7 @@ inline int64_t AccumulateDigits(char digits[], int32_t startIndex, int32_t lastI
     return -1;
 }
 
-QStatus IPAddress::StringToIPv6(qcc::String address, uint8_t addrBuf[], size_t addrBufSize)
+QStatus IPAddress::StringToIPv6(const qcc::String& address, uint8_t addrBuf[], size_t addrBufSize)
 {
     QStatus result = ER_OK;
 
@@ -564,7 +690,7 @@ QStatus IPAddress::StringToIPv6(qcc::String address, uint8_t addrBuf[], size_t a
 // 1.1.1, two octets, last is 16 bit,
 // 1.1, one octet, second is 24 bits
 // 1, value is 32 bits
-QStatus IPAddress::StringToIPv4(qcc::String address, uint8_t addrBuf[], size_t addrBufSize)
+QStatus IPAddress::StringToIPv4(const qcc::String& address, uint8_t addrBuf[], size_t addrBufSize)
 {
     QStatus result = ER_OK;
 

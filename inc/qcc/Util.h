@@ -44,6 +44,8 @@
 #include <qcc/posix/util.h>
 #elif defined(QCC_OS_GROUP_WINDOWS)
 #include <qcc/windows/util.h>
+#elif defined(QCC_OS_GROUP_WINRT)
+#include <qcc/winrt/util.h>
 #else
 #error No OS GROUP defined.
 #endif
@@ -104,7 +106,9 @@ typedef enum _OSType {
     DARWIN_OS,
 
     /*Linux*/
-    LINUX_OS
+    LINUX_OS,
+
+    WINRT_OS,
 
 } OSType;
 
@@ -260,5 +264,6 @@ void CRC16_Compute(const uint8_t* buffer, size_t bufLen, uint16_t*runningCrc);
  * @return  ER_OK if conversion was successful.
  */
 QStatus ResolveHostName(qcc::String hostname, uint8_t addr[], size_t addrSize, size_t & addrLen, uint32_t timeoutMs);
+
 };
 #endif

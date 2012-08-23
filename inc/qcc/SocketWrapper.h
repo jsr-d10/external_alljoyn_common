@@ -33,6 +33,11 @@ namespace qcc {
 extern const SocketFd INVALID_SOCKET_FD;
 
 /**
+ * Platform dependent value for an max listen backlog
+ */
+extern const int MAX_LISTEN_CONNECTIONS;
+
+/**
  * Close a socket descriptor.
  *
  * @param sockfd        Socket descriptor.
@@ -66,14 +71,13 @@ QStatus SocketDup(SocketFd sockfd, SocketFd& dupSock);
  * @param buf           Pointer to the buffer containing the data to send.
  * @param len           Number of octets in the buffer to be sent.
  * @param sent          OUT: Number of octets sent.
- * @param timeout       Max ms to wait for send to complete or 0 for infinite.
  *
  * @return  #ER_OK if the send succeeded
  *          #ER_WOULDBLOCK if the socket is non-blocking and data cannot be sent at this time.
  *          #ER_OS_ERROR if the send failed
  *          #Other errors indicating the operation failed.
  */
-QStatus Send(SocketFd sockfd, const void* buf, size_t len, size_t& sent, uint32_t timeout = 0);
+QStatus Send(SocketFd sockfd, const void* buf, size_t len, size_t& sent);
 
 /**
  * Receive a buffer of data over a socket.

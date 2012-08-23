@@ -5,7 +5,7 @@
  */
 
 /******************************************************************************
- * Copyright 2009-2011, Qualcomm Innovation Center, Inc.
+ * Copyright 2009-2012, Qualcomm Innovation Center, Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@
 using namespace std;
 using namespace qcc;
 
-int32_t qcc::Alarm::nextId = 0;
+int32_t qcc::_Alarm::nextId = 0;
 
 namespace qcc {
 
@@ -79,13 +79,65 @@ class TimerThread : public Thread {
 
 }
 
+_Alarm::_Alarm() : listener(NULL), periodMs(0), context(NULL), id(IncrementAndFetch(&nextId))
+{
+}
+
+_Alarm::_Alarm(Timespec absoluteTime, AlarmListener* listener, void* context, uint32_t periodMs)
+    : alarmTime(absoluteTime), listener(listener), periodMs(periodMs), context(context), id(IncrementAndFetch(&nextId))
+{
+}
+
+_Alarm::_Alarm(uint32_t relativeTime, AlarmListener* listener, void* context, uint32_t periodMs)
+    : alarmTime(), listener(listener), periodMs(periodMs), context(context), id(IncrementAndFetch(&nextId))
+{
+    if (relativeTime == WAIT_FOREVER) {
+        alarmTime = END_OF_TIME;
+    } else {
+        GetTimeNow(&alarmTime);
+        alarmTime += relativeTime;
+    }
+}
+
+_Alarm::_Alarm(AlarmListener* listener, void* context)
+    : alarmTime(0, TIME_RELATIVE), listener(listener), periodMs(0), context(context), id(IncrementAndFetch(&nextId))
+{
+}
+
+void* _Alarm::GetContext(void) const
+{
+    return context;
+}
+
+void _Alarm::SetContext(void* c) const
+{
+    context = c;
+}
+
+uint64_t _Alarm::GetAlarmTime() const
+{
+    return alarmTime.GetAbsoluteMillis();
+}
+
+bool _Alarm::operator<(const _Alarm& other) const
+{
+    return (alarmTime < other.alarmTime) || ((alarmTime == other.alarmTime) && (id < other.id));
+}
+
+bool _Alarm::operator==(const _Alarm& other) const
+{
+    return (alarmTime == other.alarmTime) && (id == other.id);
+}
+
 Timer::Timer(const char* name, bool expireOnExit, uint32_t concurency, bool preventReentrancy) :
+    currentAlarm(NULL),
     expireOnExit(expireOnExit),
     timerThreads(concurency),
     isRunning(false),
     controllerIdx(0),
     preventReentrancy(preventReentrancy),
-    nameStr(name)
+    nameStr(name),
+    OSTimer(this)
 {
     for (uint32_t i = 0; i < timerThreads.size(); ++i) {
         timerThreads[i] = new TimerThread(nameStr, i, this);
@@ -181,10 +233,10 @@ bool Timer::RemoveAlarm(const Alarm& alarm, bool blockIfTriggered)
     bool foundAlarm = false;
     lock.Lock();
     if (isRunning) {
-        if (alarm.periodMs) {
+        if (alarm->periodMs) {
             multiset<Alarm>::iterator it = alarms.begin();
             while (it != alarms.end()) {
-                if (it->id == alarm.id) {
+                if ((*it)->id == alarm->id) {
                     foundAlarm = true;
                     alarms.erase(it);
                     break;
@@ -259,7 +311,7 @@ bool Timer::RemoveAlarm(const AlarmListener& listener, Alarm& alarm)
     lock.Lock();
     if (isRunning) {
         for (multiset<Alarm>::iterator it = alarms.begin(); it != alarms.end(); ++it) {
-            if (it->listener == &listener) {
+            if ((*it)->listener == &listener) {
                 alarms.erase(it);
                 removedOne = true;
                 break;
@@ -276,7 +328,7 @@ bool Timer::RemoveAlarm(const AlarmListener& listener, Alarm& alarm)
                     continue;
                 }
                 const Alarm* curAlarm = timerThreads[i]->GetCurrentAlarm();
-                while (isRunning && curAlarm && (curAlarm->listener == &listener)) {
+                while (isRunning && curAlarm && ((*curAlarm)->listener == &listener)) {
                     lock.Unlock();
                     qcc::Sleep(5);
                     lock.Lock();
@@ -312,11 +364,19 @@ QStatus TimerThread::Start(void* arg, ThreadListener* listener)
     QStatus status = ER_OK;
     timer->lock.Lock();
     if (timer->isRunning) {
-        status = Thread::Start(arg, listener);
         state = TimerThread::STARTING;
+        status = Thread::Start(arg, listener);
     }
     timer->lock.Unlock();
     return status;
+}
+
+void Timer::TimerCallback(void* context)
+{
+}
+
+void Timer::TimerCleanupCallback(void* context)
+{
 }
 
 ThreadReturn STDCALL TimerThread::Run(void* arg)
@@ -358,7 +418,7 @@ ThreadReturn STDCALL TimerThread::Run(void* arg)
         if (!timer->alarms.empty()) {
             QCC_DbgPrintf(("TimerThread::Run(): Alarms pending"));
             const Alarm& topAlarm = *(timer->alarms.begin());
-            int64_t delay = topAlarm.alarmTime - now;
+            int64_t delay = topAlarm->alarmTime - now;
 
             /*
              * There is an alarm waiting to go off, but there is some delay
@@ -431,7 +491,7 @@ ThreadReturn STDCALL TimerThread::Run(void* arg)
                                 tt = timer->timerThreads[i];
                                 QCC_DbgPrintf(("TimerThread::Run(): Found idle worker at index %d", i));
                                 break;
-                            } else if (timer->timerThreads[i]->state == TimerThread::STOPPED  && !timer->timerThreads[i]->IsRunning()) {
+                            } else if (timer->timerThreads[i]->state == TimerThread::STOPPED && !timer->timerThreads[i]->IsRunning()) {
                                 tt = timer->timerThreads[i];
                                 QCC_DbgPrintf(("TimerThread::Run(): Found stopped worker at index %d", i));
                             }
@@ -495,17 +555,17 @@ ThreadReturn STDCALL TimerThread::Run(void* arg)
                     timer->reentrancyLock.Lock();
                 }
                 QCC_DbgPrintf(("TimerThread::Run(): ******** AlarmTriggered()"));
-                (top.listener->AlarmTriggered)(top, ER_OK);
+                (top->listener->AlarmTriggered)(top, ER_OK);
                 if (hasTimerLock) {
                     timer->reentrancyLock.Unlock();
                 }
                 timer->lock.Lock();
                 currentAlarm = NULL;
 
-                if (0 != top.periodMs) {
-                    top.alarmTime += top.periodMs;
-                    if (top.alarmTime < now) {
-                        top.alarmTime = now;
+                if (0 != top->periodMs) {
+                    top->alarmTime += top->periodMs;
+                    if (top->alarmTime < now) {
+                        top->alarmTime = now;
                     }
                     QCC_DbgPrintf(("TimerThread::Run(): Adding back periodic alarm"));
                     timer->AddAlarm(top);
@@ -531,11 +591,11 @@ ThreadReturn STDCALL TimerThread::Run(void* arg)
             if (isController) {
                 QCC_DbgPrintf(("TimerThread::Run(): Controller going idle"));
                 state = IDLE;
-                stopEvent.ResetEvent();
                 timer->lock.Unlock();
                 Event evt(Event::WAIT_FOREVER, 0);
                 Event::Wait(evt);
                 timer->lock.Lock();
+                stopEvent.ResetEvent();
             } else {
                 QCC_DbgPrintf(("TimerThread::Run(): non-Controller stopping"));
                 state = STOPPING;
@@ -570,7 +630,7 @@ void Timer::ThreadExit(Thread* thread)
             if (tt->hasTimerLock) {
                 reentrancyLock.Lock();
             }
-            alarm.listener->AlarmTriggered(alarm, ER_TIMER_EXITING);
+            alarm->listener->AlarmTriggered(alarm, ER_TIMER_EXITING);
             if (tt->hasTimerLock) {
                 reentrancyLock.Unlock();
             }
@@ -596,7 +656,7 @@ void Timer::EnableReentrancy()
     }
 }
 
-bool Timer::ThreadHoldsLock() const
+bool Timer::ThreadHoldsLock()
 {
     Thread* thread = Thread::GetThread();
     if (nameStr == thread->GetName()) {
@@ -606,3 +666,8 @@ bool Timer::ThreadHoldsLock() const
 
     return false;
 }
+
+OSTimer::OSTimer(qcc::Timer* timer) : _timer(timer)
+{
+}
+

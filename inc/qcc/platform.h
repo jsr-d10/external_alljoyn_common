@@ -30,6 +30,10 @@
 #include <qcc/windows/platform_types.h>
 #include <qcc/windows/unicode.h>
 #include <qcc/windows/mapping.h>
+#elif defined(QCC_OS_GROUP_WINRT)
+#include <qcc/winrt/platform_types.h>
+#include <qcc/winrt/unicode.h>
+#include <qcc/winrt/mapping.h>
 #else
 #error No OS GROUP defined.
 #endif
@@ -46,10 +50,17 @@
 
 #define QCC_DEPRECATED(func) __declspec(deprecated) func /**< mark a function as deprecated in msvc. */
 
-#else // Some unknown compiler
+#else /* Some unknown compiler */
 
 #define QCC_DEPRECATED(func); /**< mark a function as deprecated. */
 
-#endif // Compiler type
+#endif /* Compiler type */
+
+/** Boolean type for C */
+typedef int32_t QCC_BOOL;
+/** Boolean logic true for QCC_BOOL type*/
+#define QCC_TRUE 1
+/** Boolean logic false for QCC_BOOL type*/
+#define QCC_FALSE 0
 
 #endif // _QCC_PLATFORM_H

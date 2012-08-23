@@ -32,14 +32,12 @@
 #include <set>
 #include <map>
 
-#ifndef NDEBUG
-#include <qcc/LockTrace.h>
-#endif
-
 #if defined(QCC_OS_GROUP_POSIX)
 #include <qcc/posix/Thread.h>
 #elif defined(QCC_OS_GROUP_WINDOWS)
 #include <qcc/windows/Thread.h>
+#elif defined(QCC_OS_GROUP_WINRT)
+#include <qcc/winrt/Thread.h>
 #else
 #error No OS GROUP defined.
 #endif
@@ -79,10 +77,13 @@ class ThreadListener {
     virtual void ThreadExit(Thread* thread) = 0;
 };
 
+class ThreadListInitializer;
+
 /**
  * Abstract encapsulation of the os-specific threads.
  */
 class Thread {
+    friend class ThreadListInitializer;
 
   public:
 
@@ -267,25 +268,6 @@ class Thread {
      */
     void RemoveAuxListener(ThreadListener* listener);
 
-#ifndef NDEBUG
-    /**
-     * Support for debugging deadlocks
-     */
-    qcc::LockTrace lockTrace;
-
-    static void DumpLocks()
-    {
-        threadListLock.Lock();
-        std::map<ThreadHandle, Thread*>::iterator iter = threadList.begin();
-        while (iter != threadList.end()) {
-            iter->second->lockTrace.Dump();
-            ++iter;
-        }
-        threadListLock.Unlock();
-    }
-#endif
-
-
   protected:
 
     Event stopEvent;            ///< Event that indicates a stop request when set.
@@ -316,50 +298,6 @@ class Thread {
         DEAD      /**< Underlying OS thread is gone */
     } state;
 
-
-    class ThreadListLock {
-      public:
-        ThreadListLock() { }
-
-        ~ThreadListLock()
-        {
-            m_destructed = true;
-            delete m_mutex;
-            m_mutex = 0;
-        }
-
-        bool Lock(void)
-        {
-            Mutex* mutex = Get();
-            if (mutex) {
-                mutex->Lock();
-                return true;
-            }
-            return false;
-        }
-
-        void Unlock(void)
-        {
-            Mutex* mutex = Get();
-            if (mutex) {
-                mutex->Unlock();
-            }
-        }
-
-      private:
-        Mutex* Get(void)
-        {
-            if (m_mutex == NULL && m_destructed == false) {
-                m_mutex = new Mutex();
-            }
-            return m_mutex;
-        }
-
-        static Mutex* m_mutex;
-        static bool m_destructed;
-    };
-
-
     bool isStopping;                ///< Thread has received a stop request
     char funcName[80];              ///< Function name (used mostly in debug output).
     ThreadFunction function;        ///< Thread entry point or NULL is using Run() as entry point
@@ -369,6 +307,7 @@ class Thread {
     unsigned int threadId;          ///< Thread ID used by windows
     ThreadListener* listener;       ///< Listener notified of thread events (or NULL).
     bool isExternal;                ///< If true, Thread is external (i.e. lifecycle not managed by Thread obj)
+    void* platformContext;          ///< Context data specific to platform implementation
     uint32_t alertCode;             ///< Context passed from alerter to alertee
 
     typedef std::set<ThreadListener*> ThreadListeners;
@@ -383,10 +322,10 @@ class Thread {
 #endif
 
     /** Lock that protects global list of Threads and their handles */
-    static ThreadListLock threadListLock;
+    static Mutex* threadListLock;
 
     /** Thread list */
-    static std::map<ThreadHandle, Thread*> threadList;
+    static std::map<ThreadHandle, Thread*>* threadList;
 
     /**
      * C callable thread entry point.
@@ -403,6 +342,12 @@ class Thread {
      */
     static void SigHandler(int signal);
 };
+
+static class ThreadListInitializer {
+  public:
+    ThreadListInitializer();
+    ~ThreadListInitializer();
+} threadListInitializer;
 
 }
 

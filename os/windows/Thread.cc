@@ -5,7 +5,7 @@
  */
 
 /******************************************************************************
- * Copyright 2009-2011, Qualcomm Innovation Center, Inc.
+ * Copyright 2009-2012, Qualcomm Innovation Center, Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -50,13 +50,27 @@ static uint32_t stopped = 0;
 /** Maximum number of milliseconds to wait between calls to select to check for thread death */
 static const uint32_t MAX_SELECT_WAIT_MS = 10000;
 
-/** Lock that protects global list of Threads and their handles */
-Thread::ThreadListLock Thread::threadListLock;
-Mutex* Thread::ThreadListLock::m_mutex = NULL;
-bool Thread::ThreadListLock::m_destructed = false;
-
 /** Thread list */
-map<ThreadHandle, Thread*> Thread::threadList;
+Mutex* Thread::threadListLock = NULL;
+map<ThreadHandle, Thread*>* Thread::threadList = NULL;
+
+static int threadListCounter = 0;
+
+ThreadListInitializer::ThreadListInitializer()
+{
+    if (0 == threadListCounter++) {
+        Thread::threadListLock = new Mutex();
+        Thread::threadList = new map<ThreadHandle, Thread*>();
+    }
+}
+
+ThreadListInitializer::~ThreadListInitializer()
+{
+    if (0 == --threadListCounter) {
+        delete Thread::threadList;
+        delete Thread::threadListLock;
+    }
+}
 
 QStatus Sleep(uint32_t ms) {
     ::sleep(ms);
@@ -69,12 +83,12 @@ Thread* Thread::GetThread()
     unsigned int id = GetCurrentThreadId();
 
     /* Find thread on threadList */
-    threadListLock.Lock();
-    map<ThreadHandle, Thread*>::const_iterator iter = threadList.find((ThreadHandle)id);
-    if (iter != threadList.end()) {
+    threadListLock->Lock();
+    map<ThreadHandle, Thread*>::const_iterator iter = threadList->find((ThreadHandle)id);
+    if (iter != threadList->end()) {
         ret = iter->second;
     }
-    threadListLock.Unlock();
+    threadListLock->Unlock();
     /*
      * If the current thread isn't on the list, then create an external (wrapper) thread
      */
@@ -94,12 +108,12 @@ const char* Thread::GetThreadName()
     unsigned int id = GetCurrentThreadId();
 
     /* Find thread on threadList */
-    threadListLock.Lock();
-    map<ThreadHandle, Thread*>::const_iterator iter = threadList.find((ThreadHandle)id);
-    if (iter != threadList.end()) {
+    threadListLock->Lock();
+    map<ThreadHandle, Thread*>::const_iterator iter = threadList->find((ThreadHandle)id);
+    if (iter != threadList->end()) {
         thread = iter->second;
     }
-    threadListLock.Unlock();
+    threadListLock->Unlock();
     /*
      * If the current thread isn't on the list, then don't create an external (wrapper) thread
      */
@@ -112,23 +126,20 @@ const char* Thread::GetThreadName()
 
 void Thread::CleanExternalThreads()
 {
-    threadListLock.Lock();
-    map<ThreadHandle, Thread*>::iterator it = threadList.begin();
-    while (it != threadList.end()) {
+    threadListLock->Lock();
+    map<ThreadHandle, Thread*>::iterator it = threadList->begin();
+    while (it != threadList->end()) {
         if (it->second->isExternal) {
             delete it->second;
-            threadList.erase(it++);
+            threadList->erase(it++);
         } else {
             ++it;
         }
     }
-    threadListLock.Unlock();
+    threadListLock->Unlock();
 }
 
 Thread::Thread(qcc::String name, Thread::ThreadFunction func, bool isExternal) :
-#ifndef NDEBUG
-    lockTrace(this),
-#endif
     state(isExternal ? RUNNING : DEAD),
     isStopping(false),
     function(isExternal ? NULL : func),
@@ -138,6 +149,7 @@ Thread::Thread(qcc::String name, Thread::ThreadFunction func, bool isExternal) :
     threadId(isExternal ? GetCurrentThreadId() : 0),
     listener(NULL),
     isExternal(isExternal),
+    platformContext(NULL),
     alertCode(0),
     auxListeners(),
     auxListenersLock()
@@ -151,22 +163,24 @@ Thread::Thread(qcc::String name, Thread::ThreadFunction func, bool isExternal) :
      * External threads are already running so just add them to the thread list.
      */
     if (isExternal) {
-        threadListLock.Lock();
-        threadList[(ThreadHandle)threadId] = this;
-        threadListLock.Unlock();
+        threadListLock->Lock();
+        (*threadList)[(ThreadHandle)threadId] = this;
+        threadListLock->Unlock();
     }
     QCC_DbgHLPrintf(("Thread::Thread() [%s,%x]", funcName, this));
 }
 
 Thread::~Thread(void)
 {
-    if (IsRunning()) {
-        Stop();
-        Join();
-    } else if (!isExternal && handle) {
-        CloseHandle(handle);
-        handle = 0;
-        ++stopped;
+    if (!isExternal) {
+        if (IsRunning()) {
+            Stop();
+            Join();
+        } else if (handle) {
+            CloseHandle(handle);
+            handle = 0;
+            ++stopped;
+        }
     }
     QCC_DbgHLPrintf(("Thread::~Thread() [%s,%x] started:%d running:%d stopped:%d", GetName(), this, started, running, stopped));
 }
@@ -177,7 +191,7 @@ ThreadInternalReturn STDCALL Thread::RunInternal(void* threadArg)
     Thread* thread(reinterpret_cast<Thread*>(threadArg));
 
     assert(thread != NULL);
-    assert(thread->state = STARTED);
+    assert(thread->state == STARTED);
     assert(!thread->isExternal);
 
     if (thread->state != STARTED) {
@@ -187,10 +201,10 @@ ThreadInternalReturn STDCALL Thread::RunInternal(void* threadArg)
     ++started;
 
     /* Add this Thread to list of running threads */
-    threadListLock.Lock();
-    threadList[(ThreadHandle)thread->threadId] = thread;
+    threadListLock->Lock();
+    (*threadList)[(ThreadHandle)thread->threadId] = thread;
     thread->state = RUNNING;
-    threadListLock.Unlock();
+    threadListLock->Unlock();
 
     if (NULL == thread->handle) {
         QCC_DbgPrintf(("Starting thread had NULL thread handle, exiting..."));
@@ -240,9 +254,9 @@ ThreadInternalReturn STDCALL Thread::RunInternal(void* threadArg)
     /* This also means no QCC_DbgPrintf as they try to get context on the current thread */
 
     /* Remove this Thread from list of running threads */
-    threadListLock.Lock();
-    threadList.erase((ThreadHandle)threadId);
-    threadListLock.Unlock();
+    threadListLock->Lock();
+    threadList->erase((ThreadHandle)threadId);
+    threadListLock->Unlock();
 
     _endthreadex(retVal);
     return retVal;
@@ -337,14 +351,7 @@ QStatus Thread::Join(void)
     if (state == DEAD) {
         QCC_DbgPrintf(("Thread::Join() thread is dead [%s]", funcName));
         isStopping = false;
-        return ER_DEAD_THREAD;
-    }
-    /*
-     * There is a race condition where the underlying OS thread has not yet started to run. We need
-     * to wait until the thread is actually running before we can join it.
-     */
-    while (state == STARTED) {
-        ::sleep(5);
+        return ER_OK;
     }
 
     QCC_DbgPrintf(("[%s - %x] %s thread %x [%s - %x]",

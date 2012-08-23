@@ -444,7 +444,7 @@ size_t String::find_last_not_of(const char* set, size_t pos) const
 
 String String::substr(size_t pos, size_t n) const
 {
-    if (pos <= size()) {
+    if ((pos <= size()) && n) {
         return String(context->c_str + pos, MIN(n, size() - pos));
     } else {
         return String();
@@ -520,7 +520,11 @@ void String::DecRef(ManagedCtx* ctx)
     if (ctx != &nullContext) {
         uint32_t refs = DecrementAndFetch(&ctx->refCount);
         if (0 == refs) {
+#if defined(QCC_OS_DARWIN)
+            ctx->~ManagedCtx();
+#else
             ctx->ManagedCtx::~ManagedCtx();
+#endif
             free(ctx);
         }
     }

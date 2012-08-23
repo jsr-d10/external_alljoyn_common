@@ -52,7 +52,9 @@ void GetTimeNow(Timespec* ts);
 /** Timespec */
 struct Timespec {
 
-    uint32_t seconds;       /**< Number of seconds since EPOCH */
+    static const Timespec Zero;
+
+    uint64_t seconds;       /**< Number of seconds since EPOCH */
     uint16_t mseconds;      /**< Milliseconds in EPOCH */
 
     Timespec() : seconds(0), mseconds(0) { }
@@ -66,18 +68,18 @@ struct Timespec {
      */
     Timespec(uint64_t millis, TimeBase base = TIME_ABSOLUTE) {
         if (base == TIME_ABSOLUTE) {
-            seconds = (uint32_t)(millis / 1000);
+            seconds = millis / 1000;
             mseconds = (uint16_t)(millis % 1000);
         } else {
             GetTimeNow(this);
-            seconds += (uint32_t)((mseconds + millis) / 1000);
+            seconds += (millis + mseconds) / 1000;
             mseconds = (uint16_t)((mseconds + millis) % 1000);
         }
     }
 
     Timespec& operator+=(const Timespec& other) {
         seconds += other.seconds + (mseconds + other.mseconds) / 1000;
-        mseconds = (uint16_t)((mseconds + other.mseconds) % 1000);
+        mseconds = ((mseconds + other.mseconds) % 1000);
         return *this;
     }
 
@@ -99,7 +101,11 @@ struct Timespec {
         return (seconds == other.seconds) && (mseconds == other.mseconds);
     }
 
-    uint64_t GetAbsoluteMillis() const { return ((uint64_t)seconds * 1000) + (uint64_t)mseconds; }
+    bool operator!=(const Timespec& other) const {
+        return !(*this == other);
+    }
+
+    uint64_t GetAbsoluteMillis() const { return (seconds * 1000) + (uint64_t)mseconds; }
 
 };
 
@@ -134,7 +140,15 @@ inline Timespec operator+(const Timespec& ts, uint32_t ms)
 
 inline int64_t operator-(const Timespec& ts1, const Timespec& ts2)
 {
-    return ((int64_t)ts1.seconds - (int64_t)ts2.seconds) * 1000 + (int64_t)ts1.mseconds - (int64_t)ts2.mseconds;
+    int64_t t1 = (int64_t) ts1.seconds;
+    t1 *= 1000;
+    t1 += ts1.mseconds;
+
+    int64_t t2 = (int64_t) ts2.seconds;
+    t2 *= 1000;
+    t2 += ts2.mseconds;
+
+    return t1 - t2;
 }
 
 /**

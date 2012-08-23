@@ -28,8 +28,8 @@
 
 namespace qcc {
 
-static const char* RendezvousServerRootCertificate;
-static const char* RendezvousServerCACertificate;
+static const char* ServerRootCertificate;
+static const char* ServerCACertificate;
 
 static const char RendezvousTestServerRootCertificate[] = {
     "-----BEGIN CERTIFICATE-----\n"
@@ -57,6 +57,40 @@ static const char RendezvousTestServerRootCertificate[] = {
     "W0Gpi3vzWRvwqgua6dm2WVKJfvPfmS1mAP0YmTcIwjdiNXiU6sSsJEoNlTR9zCoo\n"
     "4oKQ8wVoWZpbuPZb5geszhS7YsABUPIAAfF1YQCiMULtpa6HFzzm7sdf72N3HfwE\n"
     "aQNg95KnKGrrDUI=\n"
+    "-----END CERTIFICATE-----"
+};
+
+static const char RendezvousStageServerRootCertificate[] = {
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIFTDCCBDSgAwIBAgIQB4vio3UvantYOivK060ZQDANBgkqhkiG9w0BAQUFADCB\n"
+    "tTELMAkGA1UEBhMCVVMxFzAVBgNVBAoTDlZlcmlTaWduLCBJbmMuMR8wHQYDVQQL\n"
+    "ExZWZXJpU2lnbiBUcnVzdCBOZXR3b3JrMTswOQYDVQQLEzJUZXJtcyBvZiB1c2Ug\n"
+    "YXQgaHR0cHM6Ly93d3cudmVyaXNpZ24uY29tL3JwYSAoYykxMDEvMC0GA1UEAxMm\n"
+    "VmVyaVNpZ24gQ2xhc3MgMyBTZWN1cmUgU2VydmVyIENBIC0gRzMwHhcNMTIwNDMw\n"
+    "MDAwMDAwWhcNMTMwNTAxMjM1OTU5WjCBhDELMAkGA1UEBhMCVVMxEzARBgNVBAgT\n"
+    "CkNhbGlmb3JuaWExEjAQBgNVBAcUCVNhbiBEaWVnbzEeMBwGA1UEChQVUVVBTENP\n"
+    "TU0gSW5jb3Jwb3JhdGVkMQ0wCwYDVQQLFARDT1JQMR0wGwYDVQQDFBRyZHZzLXN0\n"
+    "Zy5hbGxqb3luLm9yZzCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBANSV\n"
+    "xS3TM7dgakw2YsHEdx9T78YpozuzcZ6HUfytjSey20ii7BaavxBbBapRU046/Us1\n"
+    "r+ODf7XWz4Cn7kuUPByLxZlqKATlGAg+J4eAOgP3eXbfPPMEcw3HiGdBuSJ4C3bQ\n"
+    "jxokKz7XyY4jk39lhO/N4/rMqrdmFmSU421Ypw7QdPuOozCUTbsuYUBphzEO2i4S\n"
+    "tvB0X2ZYueTArAIvxruH8dJBLIUg3gXzeIddKGFAgTLhwC46EKIIGZyw4OgQ75TF\n"
+    "7+7jcTWvjVC6oh/e4LTiKFlTuGaBZ0nJ00ywmFXMsaUaVets83ksuLyOzv6V1j+q\n"
+    "IyXw5ChCWKcytMxR1pMCAwEAAaOCAYUwggGBMB8GA1UdEQQYMBaCFHJkdnMtc3Rn\n"
+    "LmFsbGpveW4ub3JnMAkGA1UdEwQCMAAwDgYDVR0PAQH/BAQDAgWgMEUGA1UdHwQ+\n"
+    "MDwwOqA4oDaGNGh0dHA6Ly9TVlJTZWN1cmUtRzMtY3JsLnZlcmlzaWduLmNvbS9T\n"
+    "VlJTZWN1cmVHMy5jcmwwRAYDVR0gBD0wOzA5BgtghkgBhvhFAQcXAzAqMCgGCCsG\n"
+    "AQUFBwIBFhxodHRwczovL3d3dy52ZXJpc2lnbi5jb20vY3BzMB0GA1UdJQQWMBQG\n"
+    "CCsGAQUFBwMBBggrBgEFBQcDAjAfBgNVHSMEGDAWgBQNRFwWU0TBgn4dIKsl9AFj\n"
+    "2L55pTB2BggrBgEFBQcBAQRqMGgwJAYIKwYBBQUHMAGGGGh0dHA6Ly9vY3NwLnZl\n"
+    "cmlzaWduLmNvbTBABggrBgEFBQcwAoY0aHR0cDovL1NWUlNlY3VyZS1HMy1haWEu\n"
+    "dmVyaXNpZ24uY29tL1NWUlNlY3VyZUczLmNlcjANBgkqhkiG9w0BAQUFAAOCAQEA\n"
+    "erROdpT8c2ETQI2vD1Vqnu4I1S3bIxHMBxYrepknmxpo0sd8/2+IjfzV5Hw2RrbZ\n"
+    "AW8jQF9yAUWU5iOwRILdCHtGxdXrJBpvzKICd8dkaPnvJIOESheqM06yrx18swkX\n"
+    "H+4JvS5nOwEzQt2qpwBkUmtGjG/9ACHDZ/ORQyNw/ygyR7ZhBANNAu19C4M72+dI\n"
+    "rf6kTZ3PXC5AaaiBKV/XAAZmbT1SkDMVIr0p6zWNcjWwWQOxxIQ+m7Qr5PYiDx6/\n"
+    "Yk9x7onFy2Qx3l8SeSOXAN14kHDcEG+5BhkWDse1/LVk+eDmFDNmnsgtCFLNVG5z\n"
+    "D97Ydn9rPYTEABQUlWTUsg==\n"
     "-----END CERTIFICATE-----"
 };
 
@@ -97,7 +131,13 @@ static const char RendezvousDeploymentServerRootCertificate[] = {
     "-----END CERTIFICATE-----"
 };
 
-static const char RendezvousDeploymentServerCACertificate[] = {
+/*
+ * That certificate is the intermediate cert (G3 issued by G5) that was used to verify
+ * the cert issued to the rendezvous server and signed with G3. And this cert would be
+ * the same for production, test and stage environments because the certs of all these
+ * three servers are signed with the same G3 cert.
+ */
+static const char RendezvousServerCACertificate[] = {
     "-----BEGIN CERTIFICATE-----\n"
     "MIIE0zCCA7ugAwIBAgIQGNrRniZ96LtKIVjNzGs7SjANBgkqhkiG9w0BAQUFADCB\n"
     "yjELMAkGA1UEBhMCVVMxFzAVBgNVBAoTDlZlcmlTaWduLCBJbmMuMR8wHQYDVQQL\n"
@@ -133,11 +173,14 @@ static QStatus InitializeServerRootCertificate(String Server)
     QStatus status = ER_OK;
 
     if (Server == String("rdvs-test.qualcomm.com")) {
-        RendezvousServerRootCertificate = RendezvousTestServerRootCertificate;
-        RendezvousServerCACertificate = RendezvousDeploymentServerCACertificate;
+        ServerRootCertificate = RendezvousTestServerRootCertificate;
+        ServerCACertificate = RendezvousServerCACertificate;
     } else if (Server == String("rdvs.alljoyn.org")) {
-        RendezvousServerRootCertificate = RendezvousDeploymentServerRootCertificate;
-        RendezvousServerCACertificate = RendezvousDeploymentServerCACertificate;
+        ServerRootCertificate = RendezvousDeploymentServerRootCertificate;
+        ServerCACertificate = RendezvousServerCACertificate;
+    } else if (Server == String("rdvs-stg.alljoyn.org")) {
+        ServerRootCertificate = RendezvousStageServerRootCertificate;
+        ServerCACertificate = RendezvousServerCACertificate;
     } else {
         status = ER_RENDEZVOUS_SERVER_ROOT_CERTIFICATE_UNINITIALIZED;
     }

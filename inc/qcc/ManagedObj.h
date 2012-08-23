@@ -52,14 +52,20 @@ class ManagedObj {
   private:
 
     struct ManagedCtx {
+        /**
+         * constructor for ManagedCtx
+         */
         ManagedCtx(int32_t refCount) : refCount(refCount) { }
-        int32_t refCount;
+        int32_t refCount; /**< A reference count */
     };
 
     ManagedCtx* context;
     T* object;
 
   public:
+
+    /** The underlying type */
+    typedef T OBJECT_TYPE;
 
     /** Copy constructor */
     ManagedObj<T>(const ManagedObj<T>&copyMe)
@@ -373,6 +379,16 @@ class ManagedObj {
      */
     const T* operator->() const { return object; }
 
+    /**
+     * Type conversion between managed objects of related types.
+     */
+    template <class T2> T2 cast() {
+        typename T2::OBJECT_TYPE naked = static_cast<typename T2::OBJECT_TYPE>(object);
+
+        T2 result(naked);
+        return result;
+    }
+
     /** Increment the ref count */
     void IncRef()
     {
@@ -387,13 +403,14 @@ class ManagedObj {
             object->T::~T();
             context->ManagedCtx::~ManagedCtx();
             free(context);
+            context = NULL;
         }
     }
 
     /**
      * Get the reference count
      */
-    int32_t GetRefCount() const { return context->refCount; }
+    int32_t GetRefCount() const { return context ? context->refCount : 0; }
 };
 
 

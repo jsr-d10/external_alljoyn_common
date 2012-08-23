@@ -29,8 +29,12 @@
 #include <stddef.h>
 #include <unistd.h>
 
+#ifdef __cplusplus
 namespace qcc {
 typedef int SocketFd;      /**< Socket file descriptor type. */
 }
+#else
+typedef int qcc_SocketFd; /**< Socket file descriptor type. */
+#endif
 
 #endif

@@ -214,6 +214,7 @@ qcc::String StringVectorToString(const std::vector<qcc::String>* list, const cha
  */
 uint8_t CharToU8(const char c);
 
+
 /**
  * Convert non-ascii digit to its character value
  *

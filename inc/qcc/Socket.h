@@ -25,7 +25,6 @@
 #include <qcc/platform.h>
 
 #include <qcc/IPAddress.h>
-#include <qcc/ScatterGatherList.h>
 #include <qcc/SocketTypes.h>
 #include <qcc/SocketWrapper.h>
 
@@ -113,7 +112,6 @@ QStatus Connect(SocketFd sockfd, const char* pathName);
  */
 QStatus Bind(SocketFd sockfd, const IPAddress& localAddr, uint16_t localPort);
 
-
 /**
  * Bind a socket to a local path name
  *
@@ -123,7 +121,6 @@ QStatus Bind(SocketFd sockfd, const IPAddress& localAddr, uint16_t localPort);
  * @return  Indication of success of failure.
  */
 QStatus Bind(SocketFd sockfd, const char* pathName);
-
 
 /**
  * Listen for incoming connections on a bound socket.
@@ -146,7 +143,6 @@ QStatus Listen(SocketFd sockfd, int backlog);
  * @return  Indication of success of failure.
  */
 QStatus Accept(SocketFd sockfd, IPAddress& remoteAddr, uint16_t& remotePort, SocketFd& newSockfd);
-
 
 /**
  * Accept an incoming connection from a remote host.
@@ -218,31 +214,6 @@ QStatus SendTo(SocketFd sockfd, IPAddress& remoteAddr, uint16_t remotePort,
                const void* buf, size_t len, size_t& sent);
 
 /**
- * Send a collection of buffers from a scatter-gather list to a remote host on a socket.
- *
- * @param sockfd        Socket descriptor.
- * @param sg            A scatter-gather list refering to the data to be sent.
- * @param sent          OUT: Number of octets sent.
- *
- * @return  Indication of success of failure.
- */
-QStatus SendSG(SocketFd sockfd, const ScatterGatherList& sg, size_t& sent);
-
-/**
- * Send a collection of buffers from a scatter-gather list to a remote host on a socket.
- *
- * @param sockfd        Socket descriptor.
- * @param remoteAddr    IP Address of remote host.
- * @param remotePort    IP Port on remote host.
- * @param sg            A scatter-gather list refering to the data to be sent.
- * @param sent          OUT: Number of octets sent.
- *
- * @return  Indication of success of failure.
- */
-QStatus SendToSG(SocketFd sockfd, IPAddress& remoteAddr, uint16_t remotePort,
-                 const ScatterGatherList& sg, size_t& sent);
-
-/**
  * Receive a buffer of data from a remote host on a socket.
  * This call will block until data is available, the socket is closed.
  *
@@ -269,36 +240,6 @@ QStatus Recv(SocketFd sockfd, void* buf, size_t len, size_t& received);
  */
 QStatus RecvFrom(SocketFd sockfd, IPAddress& remoteAddr, uint16_t& remotePort,
                  void* buf, size_t len, size_t& received);
-
-/**
- * Receive data into a collection of buffers in a scatter-gather list from a
- * host on a socket.
- *
- * @param sockfd        Socket descriptor.
- * @param sg            A scatter-gather list refering to buffers where received
- *                      data will be stored.
- * @param received      OUT: Number of octets received.
- *
- * @return  Indication of success of failure.
- */
-QStatus RecvSG(SocketFd sockfd, ScatterGatherList& sg, size_t& received);
-
-/**
- * Receive data into a collection of buffers in a scatter-gather list from a
- * host on a socket.
- *
- * @param sockfd        Socket descriptor.
- * @param remoteAddr    IP Address of remote host.
- * @param remotePort    IP Port on remote host.
- * @param sg            A scatter-gather list refering to buffers where received
- *                      data will be stored.
- * @param received      OUT: Number of octets received.
- *
- * @return  Indication of success of failure.
- */
-QStatus RecvFromSG(SocketFd sockfd, IPAddress& remoteAddr, uint16_t& remotePort,
-                   ScatterGatherList& sg, size_t& received);
-
 
 /**
  * Receive a buffer of data from a remote host on a socket and any file descriptors accompanying the
@@ -405,7 +346,7 @@ QStatus SetReusePort(SocketFd sockfd, bool reuse);
  * @param interface A string containing the interface name (e.g., "wlan0") on
  *     which to join the group.
  */
-QStatus JoinMulticastGroup(SocketFd sockfd, AddressFamily family, String multicastGroup, String interface);
+QStatus JoinMulticastGroup(SocketFd sockfd, AddressFamily family, String multicastGroup, String iface);
 
 /**
  * Ask a UDP-based socket to join the specified multicast group.
@@ -455,7 +396,6 @@ QStatus SetMulticastHops(SocketFd socketFd, AddressFamily family, uint32_t hops)
  * @param broadcast  Set to true to enable broadcast on the socket.
  */
 QStatus SetBroadcast(SocketFd sockfd, bool broadcast);
-
 
 } // namespace qcc
 
