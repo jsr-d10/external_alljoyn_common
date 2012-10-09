@@ -183,7 +183,7 @@ static int NetlinkRouteSocket(uint32_t bufsize)
     struct sockaddr_nl addr;
     memset(&addr, 0, sizeof(addr));
     addr.nl_family = AF_NETLINK;
-    addr.nl_pid = getpid();
+    addr.nl_pid = 0;
 
     if (bind(sockFd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         QCC_LogError(ER_FAIL, ("NetlinkRouteSocket: Can't bind to NETLINK_ROUTE socket: %s", strerror(errno)));
@@ -356,6 +356,7 @@ static std::list<IfEntry> NetlinkGetInterfaces(void)
     //
     int sockFd = NetlinkRouteSocket(BUFSIZE);
     if (sockFd < 0) {
+        delete[] buffer;
         return entries;
     }
 
@@ -469,6 +470,10 @@ static std::list<AddrEntry> NetlinkGetAddresses(uint32_t family)
     uint32_t len;
 
     int sockFd = NetlinkRouteSocket(BUFSIZE);
+    if (sockFd < 0) {
+        delete[] buffer;
+        return entries;
+    }
 
     NetlinkSend(sockFd, 0, RTM_GETADDR, family);
     len = NetlinkRecv(sockFd, buffer, BUFSIZE);

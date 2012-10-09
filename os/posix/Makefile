@@ -24,22 +24,23 @@ else
   IFCONFIG=IfConfigDarwin
 endif
 
-oslib:  AdapterUtil.o \
-        atomic.o \
-        Environ.o \
-        Event.o \
-        FileStream.o \
-        Mutex.o \
-        osUtil.o \
-        Socket.o \
-        Thread.o \
-        time.o \
-        $(IFCONFIG).o \
+oslib:  \
+	atomic.o \
+	Environ.o \
+	Event.o \
+	FileStream.o \
+	$(IFCONFIG).o \
+	Mutex.o \
+	OSLogger.o \
+	osUtil.o \
+	Socket.o \
+	SslSocket.o \
+	Thread.o \
+	time.o \
+	Timer.o
 
 %.o:%.cc
 	$(CC) $(INCLUDE) $(CXXFLAGS) $(CPPDEFINES)  -c -o $@ $<
 
 clean:
 	@rm -f *.o *~
-
-	

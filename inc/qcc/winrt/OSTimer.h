@@ -23,6 +23,9 @@
 #define _QCC_OSTIMER_H
 
 #include <qcc/CountDownLatch.h>
+#include <ctxtcall.h>
+#include <ppltasks.h>
+#include <queue>
 
 namespace qcc {
 
@@ -31,8 +34,14 @@ class _Alarm;
 
 typedef qcc::ManagedObj<_Alarm> Alarm;
 
+class CompareAlarm {
+  public:
+    bool operator()(const Alarm& a1, const Alarm& a2);
+};
+
 class OSAlarm {
   protected:
+    friend class OSTimer;
     OSAlarm();
 
     void UpdateComputedTime(Timespec absoluteTime);
@@ -45,14 +54,20 @@ class OSAlarm {
 class OSTimer {
   protected:
     OSTimer(qcc::Timer* timer);
+    ~OSTimer();
 
-    void TimerCallback(Windows::System::Threading::ThreadPoolTimer ^ timer);
+    void TimerCallback(Windows::System::Threading::ThreadPoolTimer ^ timer, Alarm & a);
     void TimerCleanupCallback(Windows::System::Threading::ThreadPoolTimer ^ timer);
+    void StopInternal(bool timerExiting);
 
     qcc::Timer* _timer;
     std::map<void*, qcc::Alarm> _timerMap;
     qcc::_CountDownLatch _timersCountdownLatch;
     std::map<void*, bool> _timerHasOwnership;
+    concurrency::task<void>* _stopTask;
+    Mutex _workQueueLock;
+    std::priority_queue<qcc::Alarm, std::vector<qcc::Alarm>, CompareAlarm> _timerWorkQueue;
+
 };
 
 }

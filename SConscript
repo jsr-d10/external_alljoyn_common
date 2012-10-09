@@ -63,7 +63,7 @@ elif env['OS'] == 'linux':
     env.AppendUnique(LIBS =['rt', 'stdc++', 'pthread', 'crypto', 'ssl'])
 elif env['OS'] == 'darwin':
     env.AppendUnique(LIBS =['stdc++', 'pthread', 'crypto', 'ssl'])
-    if env['CPU'] == 'arm':
+    if env['CPU'] == 'arm' or env['CPU'] == 'armv7' or env['CPU'] == 'armv7s':
         env.Append(CPPPATH = ['../common/crypto/openssl/openssl-1.01/include'])    
 elif env['OS'] == 'android':
     env.AppendUnique(LIBS = ['m', 'c', 'stdc++', 'crypto', 'log', 'gcc', 'ssl'])
@@ -87,7 +87,6 @@ env.AppendUnique(CPPDEFINES = ['QCC_OS_GROUP_%s' % env['OS_GROUP'].upper()])
 env.VariantDir('$OBJDIR', 'src', duplicate = 0)
 env.VariantDir('$OBJDIR/os', 'os/${OS_GROUP}', duplicate = 0)
 env.VariantDir('$OBJDIR/crypto', 'crypto/${CRYPTO}', duplicate = 0)
-env.VariantDir('$OBJDIR/test', 'test', duplicate = 0)
 
 # Setup dependent include directories
 hdrs = { 'qcc': env.File(['inc/qcc/Log.h',
@@ -107,7 +106,8 @@ env.Append(CPPPATH = [env.Dir('inc')])
 
 # Build OpenSSL if under iOS
 if env['OS'] == 'darwin':
-    if env['CPU'] == 'arm':
+    if env['CPU'] == 'arm' or env['CPU'] == 'armv7' or env['CPU'] == 'armv7s':
+        print 'Building openssl for iOS...'
         env.SConscript('crypto/openssl/openssl-1.01/SConscript', variant_dir='$OBJDIR/openssl/lib', duplicate=0)
         env.Append(LIBPATH = [os.environ.get('SRCROOT') + '/../common/crypto/openssl/openssl-1.01/build/' + os.environ.get('CONFIGURATION') + '-' + os.environ.get('PLATFORM_NAME')])
         
@@ -124,10 +124,6 @@ if env['OS_GROUP'] == 'winrt':
 srcs = [ f for f in srcs if basename(str(f)) not in status_src ]
 	
 objs = env.Object(srcs)
-
-# Test programs
-progs = env.SConscript('$OBJDIR/test/SConscript')
-env.Install('$DISTDIR/bin', progs)
 
 # Build unit Tests
 env.SConscript('unit_test/SConscript', variant_dir='$OBJDIR/unittest', duplicate=0)

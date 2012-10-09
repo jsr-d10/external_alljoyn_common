@@ -1,13 +1,12 @@
 /**
  * @file
  *
- * This file defines the Network Interface information class.
+ * SSL stream-based socket implementation for Windows
+ *
  */
 
 /******************************************************************************
- *
- *
- * Copyright 2009-2011, Qualcomm Innovation Center, Inc.
+ * Copyright 2012 Qualcomm Innovation Center, Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -22,26 +21,51 @@
  *    limitations under the License.
  ******************************************************************************/
 
-#ifndef _QCC_NETINFO_H
-#define _QCC_NETINFO_H
-
 #include <qcc/platform.h>
-#include <qcc/String.h>
 #include <qcc/IPAddress.h>
+#include <qcc/SslSocket.h>
+
+
+#define QCC_MODULE  "SSL"
+
 
 namespace qcc {
 
-/**
- * Network information data structure that describes various attributes of a
- * given network interface.
- */
-struct NetInfo {
-    qcc::String name;        ///< OS defined interface name.
-    IPAddress addr;          ///< IP Address for the interface.
-    size_t mtu;              ///< MTU size of the interface.
-    bool isVPN;              ///< True iff the interface is a VPN
-};
+SslSocket::SslSocket(String host) :
+    internal(NULL),
+    sourceEvent(&qcc::Event::neverSet),
+    sinkEvent(&qcc::Event::neverSet),
+    Host(host),
+    sock(-1)
+{
+}
+
+SslSocket::~SslSocket() {
 
 }
 
-#endif
+QStatus SslSocket::Connect(const qcc::String hostName, uint16_t port)
+{
+    return ER_FAIL;
+}
+
+void SslSocket::Close()
+{
+}
+
+QStatus SslSocket::PullBytes(void*buf, size_t reqBytes, size_t& actualBytes, uint32_t timeout)
+{
+    return ER_FAIL;
+}
+
+QStatus SslSocket::PushBytes(const void* buf, size_t numBytes, size_t& numSent)
+{
+    return ER_FAIL;
+}
+
+QStatus SslSocket::ImportPEM()
+{
+    return ER_FAIL;
+}
+
+}  /* namespace */
